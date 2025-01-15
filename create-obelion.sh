@@ -62,10 +62,30 @@ CUSTOM_DIR="$WORK_DIR/custom"
 rm -rf "$CUSTOM_DIR"
 mkdir -p "$CUSTOM_DIR"
 
+print_status "Installing required packages..."
+sudo apt-get update
+sudo apt-get install -y xorriso isolinux syslinux syslinux-common
+
 print_status "Mounting and copying ISO contents..."
 sudo mount -o loop "$ISO_FILE" "$MOUNT_DIR"
+
+# Copy all files preserving attributes
 rsync -av "$MOUNT_DIR/" "$CUSTOM_DIR/"
+
+# Ensure boot files are copied and have correct permissions
+sudo cp -r "$MOUNT_DIR/boot" "$CUSTOM_DIR/"
+sudo cp -r "$MOUNT_DIR/EFI" "$CUSTOM_DIR/"
+[ -d "$MOUNT_DIR/.disk" ] && sudo cp -r "$MOUNT_DIR/.disk" "$CUSTOM_DIR/"
+
+# Copy isolinux files
+sudo mkdir -p "$CUSTOM_DIR/isolinux"
+sudo cp /usr/lib/ISOLINUX/isolinux.bin "$CUSTOM_DIR/isolinux/"
+sudo cp /usr/lib/syslinux/modules/bios/* "$CUSTOM_DIR/isolinux/"
+
 sudo umount "$MOUNT_DIR"
+
+# Ensure correct permissions
+sudo chmod -R 755 "$CUSTOM_DIR"
 
 # Create package list
 print_status "Creating package list..."
@@ -219,18 +239,20 @@ if [ ! -f "isolinux/isolinux.bin" ]; then
 fi
 
 # Create the ISO with error handling
-sudo xorriso -as mkisofs -r \
-    -V "Obelion_Linux" \
-    -o "$OUTPUT_DIR/$DISTRO_NAME_LOWER-$DISTRO_VERSION.iso" \
-    -b isolinux/isolinux.bin \
-    -c isolinux/boot.cat \
-    -no-emul-boot \
-    -boot-load-size 4 \
-    -boot-info-table \
+sudo xorriso -as mkisofs \
+    -iso-level 3 \
+    -full-iso9660-filenames \
+    -volid "Obelion_Linux" \
+    -output "$OUTPUT_DIR/$DISTRO_NAME_LOWER-$DISTRO_VERSION.iso" \
+    -eltorito-boot isolinux/isolinux.bin \
+    -eltorito-catalog isolinux/boot.cat \
+    -no-emul-boot -boot-load-size 4 -boot-info-table \
+    -isohybrid-mbr /usr/lib/ISOLINUX/isohdpfx.bin \
     -eltorito-alt-boot \
     -e boot/grub/efi.img \
     -no-emul-boot \
-    . || {
+    -isohybrid-gpt-basdat \
+    "$CUSTOM_DIR" || {
         echo "Error: ISO creation failed"
         exit 1
     }
