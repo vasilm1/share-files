@@ -161,8 +161,133 @@ EOF
 }
 
 # Create directory for common files
-mkdir -p custom-files
-cp -r branding post-install.sh isolinux custom-files/
+mkdir -p custom-files/branding
+mkdir -p custom-files/isolinux
+
+# Create branding files
+cat > custom-files/branding/obelion-logo.txt << EOF
+   ____  _          _ _             
+  / __ \| |        | (_)            
+ | |  | | |__   ___| |_  ___  _ __  
+ | |  | | '_ \ / _ \ | |/ _ \| '_ \ 
+ | |__| | |_) |  __/ | | (_) | | | |
+  \____/|_.__/ \___|_|_|\___/|_| |_|
+                                    
+     $DISTRO_NAME $DISTRO_VERSION ($DISTRO_CODENAME)
+     $DISTRO_DESCRIPTION
+EOF
+
+# Create post-install script
+cat > custom-files/post-install.sh << 'EOF'
+#!/bin/bash
+
+# Set up AI development environment
+pip3 install --upgrade pip
+pip3 install jupyter torch tensorflow transformers huggingface_hub \
+    pandas numpy matplotlib seaborn scikit-learn opencv-python \
+    pytest black flake8 mypy poetry
+
+# Install Node.js LTS and global packages
+curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+sudo apt-get install -y nodejs
+npm install -g typescript ts-node nodemon prettier eslint
+
+# Install Rust and cargo packages
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+source $HOME/.cargo/env
+cargo install tokei ripgrep fd-find bat exa
+
+# Install Oh My Zsh and plugins
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended
+git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+git clone https://github.com/zsh-users/zsh-syntax-highlighting ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+
+# Configure XFCE with modern dark theme
+xfconf-query -c xsettings -p /Net/ThemeName -s "Arc-Dark"
+xfconf-query -c xfwm4 -p /general/theme -s "Arc-Dark"
+xfconf-query -c xsettings -p /Net/IconThemeName -s "Papirus-Dark"
+
+# Set up VS Code with extensions
+code --install-extension ms-python.python
+code --install-extension rust-lang.rust-analyzer
+code --install-extension vadimcn.vscode-lldb
+code --install-extension ms-toolsai.jupyter
+code --install-extension dracula-theme.theme-dracula
+code --install-extension PKief.material-icon-theme
+code --install-extension esbenp.prettier-vscode
+code --install-extension dbaeumer.vscode-eslint
+code --install-extension ms-azuretools.vscode-docker
+code --install-extension GitHub.copilot
+
+# Create welcome message
+cat > /etc/motd << MOTD
+Welcome to Obelion Linux - Your AI Development Platform
+Version: $DISTRO_VERSION ($DISTRO_CODENAME)
+
+🚀 Quick Start:
+- VS Code: code
+- Jupyter: jupyter notebook
+- System Monitor: htop
+- File Explorer: thunar
+
+📚 Documentation: /usr/share/doc/obelion
+🐛 Report issues: https://github.com/obelion/issues
+🐦 Follow us: https://x.com/ObelionOS
+MOTD
+
+# Set up GPU support
+ubuntu-drivers autoinstall
+
+# Configure Docker
+sudo usermod -aG docker $USER
+sudo systemctl enable docker
+sudo systemctl start docker
+
+# Create useful aliases
+cat >> ~/.zshrc << 'ALIASES'
+# Development
+alias py='python3'
+alias ipy='ipython'
+alias jn='jupyter notebook'
+alias pip='pip3'
+alias g='git'
+alias d='docker'
+alias dc='docker-compose'
+
+# Modern CLI tools
+alias ls='exa'
+alias ll='exa -l'
+alias la='exa -la'
+alias cat='bat'
+alias find='fd'
+alias grep='rg'
+ALIASES
+
+# Create development workspace
+mkdir -p ~/workspace/{python,rust,node,go,data}
+EOF
+
+# Make post-install script executable
+chmod +x custom-files/post-install.sh
+
+# Create isolinux configuration
+cat > custom-files/isolinux/txt.cfg << EOF
+default install
+label install
+  menu label ^Install $DISTRO_NAME Linux $DISTRO_VERSION
+  kernel /casper/vmlinuz
+  append  file=/cdrom/preseed/ubuntu.seed boot=casper initrd=/casper/initrd quiet splash ---
+label check
+  menu label ^Check disc for defects
+  kernel /casper/vmlinuz
+  append  boot=casper integrity-check initrd=/casper/initrd quiet splash ---
+label memtest
+  menu label Test ^memory
+  kernel /install/mt86plus
+label hd
+  menu label ^Boot from first hard disk
+  localboot 0x80
+EOF
 
 # Build both architectures
 print_status "Starting multi-architecture build..."
