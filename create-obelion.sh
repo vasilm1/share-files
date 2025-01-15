@@ -48,20 +48,54 @@ build_iso() {
     
     # Download ISO if not present
     local iso_file="$ISO_DIR/ubuntu-server-$arch.iso"
-    if [ ! -f "$iso_file" ]; then
+    if [ ! -f "$iso_file" ] || [ ! -s "$iso_file" ]; then
         print_status "Downloading Ubuntu Server ISO for $arch..."
-        wget -O "$iso_file" "$iso_url"
+        rm -f "$iso_file"
+        wget --progress=bar:force:noscroll -O "$iso_file" "$iso_url"
+        
+        # Verify download
+        if [ ! -s "$iso_file" ]; then
+            echo "Error: Downloaded ISO file is empty or corrupted"
+            exit 1
+        fi
+        
+        # Check file size (should be at least 500MB)
+        local size=$(stat -f%z "$iso_file" 2>/dev/null || stat -c%s "$iso_file")
+        if [ "$size" -lt 524288000 ]; then
+            echo "Error: Downloaded ISO file is too small (${size} bytes)"
+            echo "Expected size should be at least 500MB"
+            rm -f "$iso_file"
+            exit 1
+        fi
+    fi
+    
+    print_status "Verifying ISO file..."
+    if ! file "$iso_file" | grep -q "ISO 9660"; then
+        echo "Error: File is not a valid ISO image"
+        echo "File details: $(file "$iso_file")"
+        rm -f "$iso_file"
+        exit 1
     fi
     
     # Mount and copy ISO contents
     print_status "Mounting and copying ISO contents for $arch..."
+    
+    # Prepare mount point
+    sudo rm -rf "$MOUNT_DIR"
+    mkdir -p "$MOUNT_DIR"
+    
     # Create loop device and mount
     LOOP_DEVICE=$(sudo losetup -f)
     sudo losetup "$LOOP_DEVICE" "$iso_file"
-    sudo mount "$LOOP_DEVICE" "$MOUNT_DIR"
+    sudo mount "$LOOP_DEVICE" "$MOUNT_DIR" || {
+        echo "Mount failed, trying with -o loop..."
+        sudo losetup -d "$LOOP_DEVICE"
+        sudo mount -o loop "$iso_file" "$MOUNT_DIR"
+    }
+    
     rsync -av "$MOUNT_DIR/" "$custom_dir/"
-    sudo umount "$MOUNT_DIR"
-    sudo losetup -d "$LOOP_DEVICE"
+    sudo umount "$MOUNT_DIR" || sudo umount -f "$MOUNT_DIR"
+    sudo losetup -d "$LOOP_DEVICE" 2>/dev/null || true
     
     # Create custom package list
     cat > "$custom_dir/packages.list" << EOF
