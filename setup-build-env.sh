@@ -67,9 +67,8 @@ else
     
     # Add universe repository and enable all package sources
     print_status "Adding required repositories..."
-    sudo add-apt-repository universe
-    sudo add-apt-repository multiverse
-    sudo sed -i 's/# deb/deb/g' /etc/apt/sources.list
+    sudo add-apt-repository -y universe
+    sudo add-apt-repository -y multiverse
     
     # Update package list
     print_status "Updating package list..."
@@ -83,14 +82,11 @@ else
         rsync \
         genisoimage \
         squashfs-tools \
-        syslinux-common \
-        syslinux-utils \
         isolinux \
+        syslinux \
         binutils \
-        grub-common \
-        grub-gfxpayload-lists \
-        grub-pc-bin \
-        grub-efi-amd64-signed \
+        grub2 \
+        grub-efi \
         mtools \
         dosfstools \
         python3 \
