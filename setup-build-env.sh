@@ -65,10 +65,11 @@ else
     # Running on Linux
     print_status "Setting up build environment for Linux..."
     
-    # Add universe repository
+    # Add universe repository and enable all package sources
     print_status "Adding required repositories..."
     sudo add-apt-repository universe
     sudo add-apt-repository multiverse
+    sudo sed -i 's/# deb/deb/g' /etc/apt/sources.list
     
     # Update package list
     print_status "Updating package list..."
@@ -83,14 +84,13 @@ else
         genisoimage \
         squashfs-tools \
         syslinux-common \
+        syslinux-utils \
         isolinux \
         binutils \
-        grub2 \
-        grub2-common \
-        grub-pc \
+        grub-common \
+        grub-gfxpayload-lists \
         grub-pc-bin \
-        grub-efi-amd64 \
-        grub-efi-amd64-bin \
+        grub-efi-amd64-signed \
         mtools \
         dosfstools \
         python3 \
