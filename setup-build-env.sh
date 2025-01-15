@@ -65,6 +65,11 @@ else
     # Running on Linux
     print_status "Setting up build environment for Linux..."
     
+    # Add universe repository
+    print_status "Adding required repositories..."
+    sudo add-apt-repository universe
+    sudo add-apt-repository multiverse
+    
     # Update package list
     print_status "Updating package list..."
     sudo apt-get update
@@ -77,10 +82,14 @@ else
         rsync \
         genisoimage \
         squashfs-tools \
-        syslinux \
+        syslinux-common \
         isolinux \
         binutils \
+        grub2 \
+        grub2-common \
+        grub-pc \
         grub-pc-bin \
+        grub-efi-amd64 \
         grub-efi-amd64-bin \
         mtools \
         dosfstools \
