@@ -12,7 +12,7 @@ MOUNT_DIR="$WORK_DIR/mnt"
 OUTPUT_DIR="$WORK_DIR/output"
 
 # ISO URLs for both architectures
-ARM64_ISO_URL="https://cdimage.ubuntu.com/releases/22.04.3/release/ubuntu-22.04.3-live-server-arm64.iso"
+ARM64_ISO_URL="https://cdimage.ubuntu.com/ubuntu-server/jammy/daily-live/current/jammy-live-server-arm64.iso"
 X86_64_ISO_URL="https://releases.ubuntu.com/22.04.3/ubuntu-22.04.3-live-server-amd64.iso"
 
 # Branding
@@ -328,11 +328,9 @@ label hd
 EOF
 
 # Build both architectures
-print_status "Starting multi-architecture build..."
+print_status "Starting build for ARM64..."
 build_iso "arm64" "$ARM64_ISO_URL"
-build_iso "x86_64" "$X86_64_ISO_URL"
 
-print_success "Build complete! ISOs are available at:"
+print_success "Build complete! ISO is available at:"
 print_success "ARM64: $OUTPUT_DIR/${DISTRO_NAME,,}-$DISTRO_VERSION-arm64.iso"
-print_success "x86_64: $OUTPUT_DIR/${DISTRO_NAME,,}-$DISTRO_VERSION-x86_64.iso"
-print_success "You can now burn these ISOs to USB drives using 'dd' or your preferred tool." 
+print_success "You can now burn this ISO to a USB drive using 'dd' or your preferred tool." 
