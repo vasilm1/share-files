@@ -202,9 +202,26 @@ chmod +x "$CUSTOM_DIR/post-install.sh"
 # Create custom ISO
 print_status "Creating custom ISO..."
 cd "$CUSTOM_DIR"
+
+# Convert distro name to lowercase for filename
+DISTRO_NAME_LOWER=$(echo "$DISTRO_NAME" | tr '[:upper:]' '[:lower:]')
+
+# Check if xorriso is installed
+if ! command -v xorriso >/dev/null 2>&1; then
+    echo "Error: xorriso is not installed. Installing now..."
+    sudo apt-get update && sudo apt-get install -y xorriso
+fi
+
+# Check if required boot files exist
+if [ ! -f "isolinux/isolinux.bin" ]; then
+    echo "Error: isolinux.bin not found. Installing syslinux-common..."
+    sudo apt-get update && sudo apt-get install -y syslinux-common
+fi
+
+# Create the ISO with error handling
 sudo xorriso -as mkisofs -r \
-    -V "${DISTRO_NAME}_Linux" \
-    -o "$OUTPUT_DIR/${DISTRO_NAME,,}-$DISTRO_VERSION.iso" \
+    -V "Obelion_Linux" \
+    -o "$OUTPUT_DIR/$DISTRO_NAME_LOWER-$DISTRO_VERSION.iso" \
     -b isolinux/isolinux.bin \
     -c isolinux/boot.cat \
     -no-emul-boot \
@@ -213,8 +230,11 @@ sudo xorriso -as mkisofs -r \
     -eltorito-alt-boot \
     -e boot/grub/efi.img \
     -no-emul-boot \
-    .
+    . || {
+        echo "Error: ISO creation failed"
+        exit 1
+    }
 
 print_success "Build complete! ISO is available at:"
-print_success "$OUTPUT_DIR/${DISTRO_NAME,,}-$DISTRO_VERSION.iso"
+print_success "$OUTPUT_DIR/$DISTRO_NAME_LOWER-$DISTRO_VERSION.iso"
 print_success "You can now burn this ISO to a USB drive using 'dd' or your preferred tool." 
