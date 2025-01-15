@@ -55,9 +55,13 @@ build_iso() {
     
     # Mount and copy ISO contents
     print_status "Mounting and copying ISO contents for $arch..."
-    sudo mount -o loop "$iso_file" "$MOUNT_DIR"
+    # Create loop device and mount
+    LOOP_DEVICE=$(sudo losetup -f)
+    sudo losetup "$LOOP_DEVICE" "$iso_file"
+    sudo mount "$LOOP_DEVICE" "$MOUNT_DIR"
     rsync -av "$MOUNT_DIR/" "$custom_dir/"
     sudo umount "$MOUNT_DIR"
+    sudo losetup -d "$LOOP_DEVICE"
     
     # Create custom package list
     cat > "$custom_dir/packages.list" << EOF
