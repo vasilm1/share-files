@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Obelion Linux Builder
-# This script creates custom AI-focused Linux distribution ISOs for both ARM64 and x86_64
+# This script creates custom AI-focused Linux distribution ISOs
 
 set -e  # Exit on error
 
@@ -11,9 +11,8 @@ ISO_DIR="$WORK_DIR/iso"
 MOUNT_DIR="$WORK_DIR/mnt"
 OUTPUT_DIR="$WORK_DIR/output"
 
-# ISO URLs for both architectures
-ARM64_ISO_URL="https://cdimage.ubuntu.com/ubuntu-server/jammy/daily-live/current/jammy-live-server-arm64.iso"
-X86_64_ISO_URL="https://releases.ubuntu.com/22.04.3/ubuntu-22.04.3-live-server-amd64.iso"
+# ISO URL - using stable release URL
+ISO_URL="https://releases.ubuntu.com/22.04.3/ubuntu-22.04.3-live-server-amd64.iso"
 
 # Branding
 DISTRO_NAME="Obelion"
@@ -35,70 +34,42 @@ print_success() {
     echo -e "${GREEN}[Success]${NC} $1"
 }
 
-# Function to build ISO for specific architecture
-build_iso() {
-    local arch=$1
-    local iso_url=$2
-    local custom_dir="$WORK_DIR/custom-$arch"
+# Create directories
+mkdir -p "$ISO_DIR" "$MOUNT_DIR" "$OUTPUT_DIR"
+
+# Download ISO if not present
+ISO_FILE="$ISO_DIR/ubuntu-server.iso"
+if [ ! -f "$ISO_FILE" ] || [ ! -s "$ISO_FILE" ]; then
+    print_status "Downloading Ubuntu Server ISO..."
+    wget --progress=bar:force:noscroll -O "$ISO_FILE" "$ISO_URL"
     
-    print_status "Building $arch version..."
-    
-    # Create directories
-    mkdir -p "$ISO_DIR" "$MOUNT_DIR" "$custom_dir" "$OUTPUT_DIR"
-    
-    # Download ISO if not present
-    local iso_file="$ISO_DIR/ubuntu-server-$arch.iso"
-    if [ ! -f "$iso_file" ] || [ ! -s "$iso_file" ]; then
-        print_status "Downloading Ubuntu Server ISO for $arch..."
-        rm -f "$iso_file"
-        wget --progress=bar:force:noscroll -O "$iso_file" "$iso_url"
-        
-        # Verify download
-        if [ ! -s "$iso_file" ]; then
-            echo "Error: Downloaded ISO file is empty or corrupted"
-            exit 1
-        fi
-        
-        # Check file size (should be at least 500MB)
-        local size=$(stat -f%z "$iso_file" 2>/dev/null || stat -c%s "$iso_file")
-        if [ "$size" -lt 524288000 ]; then
-            echo "Error: Downloaded ISO file is too small (${size} bytes)"
-            echo "Expected size should be at least 500MB"
-            rm -f "$iso_file"
-            exit 1
-        fi
-    fi
-    
-    print_status "Verifying ISO file..."
-    if ! file "$iso_file" | grep -q "ISO 9660"; then
-        echo "Error: File is not a valid ISO image"
-        echo "File details: $(file "$iso_file")"
-        rm -f "$iso_file"
+    # Verify download
+    if [ ! -s "$ISO_FILE" ]; then
+        echo "Error: Download failed"
         exit 1
     fi
-    
-    # Mount and copy ISO contents
-    print_status "Mounting and copying ISO contents for $arch..."
-    
-    # Prepare mount point
-    sudo rm -rf "$MOUNT_DIR"
-    mkdir -p "$MOUNT_DIR"
-    
-    # Create loop device and mount
-    LOOP_DEVICE=$(sudo losetup -f)
-    sudo losetup "$LOOP_DEVICE" "$iso_file"
-    sudo mount "$LOOP_DEVICE" "$MOUNT_DIR" || {
-        echo "Mount failed, trying with -o loop..."
-        sudo losetup -d "$LOOP_DEVICE"
-        sudo mount -o loop "$iso_file" "$MOUNT_DIR"
-    }
-    
-    rsync -av "$MOUNT_DIR/" "$custom_dir/"
-    sudo umount "$MOUNT_DIR" || sudo umount -f "$MOUNT_DIR"
-    sudo losetup -d "$LOOP_DEVICE" 2>/dev/null || true
-    
-    # Create custom package list
-    cat > "$custom_dir/packages.list" << EOF
+fi
+
+print_status "Verifying ISO file..."
+if ! file "$ISO_FILE" | grep -q "ISO 9660"; then
+    echo "Error: Not a valid ISO image"
+    rm -f "$ISO_FILE"
+    exit 1
+fi
+
+# Create working directory for customization
+CUSTOM_DIR="$WORK_DIR/custom"
+rm -rf "$CUSTOM_DIR"
+mkdir -p "$CUSTOM_DIR"
+
+print_status "Mounting and copying ISO contents..."
+sudo mount -o loop "$ISO_FILE" "$MOUNT_DIR"
+rsync -av "$MOUNT_DIR/" "$CUSTOM_DIR/"
+sudo umount "$MOUNT_DIR"
+
+# Create package list
+print_status "Creating package list..."
+cat > "$CUSTOM_DIR/packages.list" << EOF
 # Desktop Environment
 xfce4
 xfce4-goodies
@@ -120,8 +91,6 @@ nodejs
 npm
 rustc
 cargo
-cuda-toolkit
-nvidia-driver-latest
 docker.io
 docker-compose
 golang
@@ -156,67 +125,9 @@ zsh
 tmux
 EOF
 
-    # Copy post-install script and other files
-    cp -r custom-files/* "$custom_dir/"
-    
-    # Create ISO
-    print_status "Creating $arch ISO..."
-    cd "$custom_dir"
-    
-    if [ "$arch" = "arm64" ]; then
-        # ARM64-specific ISO creation
-        sudo xorriso -as mkisofs -r \
-            -V "${DISTRO_NAME}_Linux" \
-            -o "$OUTPUT_DIR/${DISTRO_NAME,,}-$DISTRO_VERSION-$arch.iso" \
-            -J -l -b isolinux/isolinux.bin \
-            -c isolinux/boot.cat \
-            -no-emul-boot \
-            -boot-load-size 4 \
-            -boot-info-table \
-            -eltorito-alt-boot \
-            -e boot/grub/efi.img \
-            -no-emul-boot \
-            -isohybrid-gpt-basdat \
-            -isohybrid-apm-hfsplus \
-            .
-    else
-        # x86_64-specific ISO creation
-        sudo xorriso -as mkisofs -r \
-            -V "${DISTRO_NAME}_Linux" \
-            -o "$OUTPUT_DIR/${DISTRO_NAME,,}-$DISTRO_VERSION-$arch.iso" \
-            -b isolinux/isolinux.bin \
-            -c isolinux/boot.cat \
-            -no-emul-boot \
-            -boot-load-size 4 \
-            -boot-info-table \
-            -eltorito-alt-boot \
-            -e boot/grub/efi.img \
-            -no-emul-boot \
-            .
-    fi
-    
-    print_success "$arch ISO has been created!"
-}
-
-# Create directory for common files
-mkdir -p custom-files/branding
-mkdir -p custom-files/isolinux
-
-# Create branding files
-cat > custom-files/branding/obelion-logo.txt << EOF
-   ____  _          _ _             
-  / __ \| |        | (_)            
- | |  | | |__   ___| |_  ___  _ __  
- | |  | | '_ \ / _ \ | |/ _ \| '_ \ 
- | |__| | |_) |  __/ | | (_) | | | |
-  \____/|_.__/ \___|_|_|\___/|_| |_|
-                                    
-     $DISTRO_NAME $DISTRO_VERSION ($DISTRO_CODENAME)
-     $DISTRO_DESCRIPTION
-EOF
-
 # Create post-install script
-cat > custom-files/post-install.sh << 'EOF'
+print_status "Creating post-install configuration..."
+cat > "$CUSTOM_DIR/post-install.sh" << 'EOF'
 #!/bin/bash
 
 # Set up AI development environment
@@ -257,25 +168,6 @@ code --install-extension dbaeumer.vscode-eslint
 code --install-extension ms-azuretools.vscode-docker
 code --install-extension GitHub.copilot
 
-# Create welcome message
-cat > /etc/motd << MOTD
-Welcome to Obelion Linux - Your AI Development Platform
-Version: $DISTRO_VERSION ($DISTRO_CODENAME)
-
-🚀 Quick Start:
-- VS Code: code
-- Jupyter: jupyter notebook
-- System Monitor: htop
-- File Explorer: thunar
-
-📚 Documentation: /usr/share/doc/obelion
-🐛 Report issues: https://github.com/obelion/issues
-🐦 Follow us: https://x.com/ObelionOS
-MOTD
-
-# Set up GPU support
-ubuntu-drivers autoinstall
-
 # Configure Docker
 sudo usermod -aG docker $USER
 sudo systemctl enable docker
@@ -305,32 +197,24 @@ ALIASES
 mkdir -p ~/workspace/{python,rust,node,go,data}
 EOF
 
-# Make post-install script executable
-chmod +x custom-files/post-install.sh
+chmod +x "$CUSTOM_DIR/post-install.sh"
 
-# Create isolinux configuration
-cat > custom-files/isolinux/txt.cfg << EOF
-default install
-label install
-  menu label ^Install $DISTRO_NAME Linux $DISTRO_VERSION
-  kernel /casper/vmlinuz
-  append  file=/cdrom/preseed/ubuntu.seed boot=casper initrd=/casper/initrd quiet splash ---
-label check
-  menu label ^Check disc for defects
-  kernel /casper/vmlinuz
-  append  boot=casper integrity-check initrd=/casper/initrd quiet splash ---
-label memtest
-  menu label Test ^memory
-  kernel /install/mt86plus
-label hd
-  menu label ^Boot from first hard disk
-  localboot 0x80
-EOF
-
-# Build both architectures
-print_status "Starting build for ARM64..."
-build_iso "arm64" "$ARM64_ISO_URL"
+# Create custom ISO
+print_status "Creating custom ISO..."
+cd "$CUSTOM_DIR"
+sudo xorriso -as mkisofs -r \
+    -V "${DISTRO_NAME}_Linux" \
+    -o "$OUTPUT_DIR/${DISTRO_NAME,,}-$DISTRO_VERSION.iso" \
+    -b isolinux/isolinux.bin \
+    -c isolinux/boot.cat \
+    -no-emul-boot \
+    -boot-load-size 4 \
+    -boot-info-table \
+    -eltorito-alt-boot \
+    -e boot/grub/efi.img \
+    -no-emul-boot \
+    .
 
 print_success "Build complete! ISO is available at:"
-print_success "ARM64: $OUTPUT_DIR/${DISTRO_NAME,,}-$DISTRO_VERSION-arm64.iso"
+print_success "$OUTPUT_DIR/${DISTRO_NAME,,}-$DISTRO_VERSION.iso"
 print_success "You can now burn this ISO to a USB drive using 'dd' or your preferred tool." 
