@@ -12,7 +12,7 @@ MOUNT_DIR="$WORK_DIR/mnt"
 OUTPUT_DIR="$WORK_DIR/output"
 
 # ISO URLs for both architectures
-ARM64_ISO_URL="https://cdimage.ubuntu.com/ubuntu-server/jammy/daily-live/current/jammy-live-server-arm64.iso"
+ARM64_ISO_URL="https://cdimage.ubuntu.com/releases/22.04.3/release/ubuntu-22.04.3-live-server-arm64.iso"
 X86_64_ISO_URL="https://releases.ubuntu.com/22.04.3/ubuntu-22.04.3-live-server-amd64.iso"
 
 # Branding
